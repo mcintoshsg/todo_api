@@ -22,10 +22,6 @@ def todo_or_404(todo_id):
     else:
         return todo   
 
-# def add_course(review):
-#     review.for_course = url_for('resources.courses.course', id=review.course.id)
-#     return review
-
 class TodoList(Resource):
     ''' task list resource '''
     def __init__(self):
@@ -41,6 +37,7 @@ class TodoList(Resource):
     def get(self):
         todos = [marshal(todos, todo_fields)
                     for todos in models.Todo.select()]
+        print(type(todos))            
         return todos
 
     @marshal_with(todo_fields)

@@ -1,3 +1,4 @@
+from base64 import b64encode
 import json
 import unittest
 
@@ -24,8 +25,6 @@ class BaseTestCase(unittest.TestCase):
         TEST_DB.drop_tables(User, Todo)
         TEST_DB.close()
         
-
-
 class UserModelTestCase(BaseTestCase):
     ''' test cases for the user model '''
     @staticmethod # static method as it does not access anything in the class
@@ -104,6 +103,38 @@ class UserResourceTestCase(BaseTestCase):
             self.assertEqual(response.status_code, 400)  
             self.assertIn(r_test,
                         response.get_data(as_text=True))    
+
+class TodoResourceTestCase(BaseTestCase):
+    ''' test the user api resourcses '''
+    def test_get_todos_no_auth(self):
+        response = self.app.get('/api/v1/todos')
+        r = response.get_data()
+        print(type(r))
+
+
+    def test_post_todo_with_auth(self):
+        UserModelTestCase.create_users(1)
+        user = User.select().get()
+        todo_data = {
+            'name': 'Finish Project',
+            'created_by': user.id
+        }
+        
+        headers={
+                'Authorization': 'Basic ' + b64encode(
+                    bytes(user.username + ':' + 'password', 'ascii')
+                ).decode('ascii')
+            }
+        
+        r_test = "Finish Project"
+        
+        with test_database(TEST_DB, (Todo,)):
+            response = self.app.post('/api/v1/todos', data=todo_data,
+                                    headers=headers)
+            self.assertEqual(response.status_code, 201)  
+            self.assertIn(r_test,
+                        response.get_data(as_text=True))
+
 
 '''
 Tests:
