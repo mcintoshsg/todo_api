@@ -105,20 +105,6 @@ class UserResourceTestCase(BaseTestCase):
             self.assertIn(r_test,
                         response.get_data(as_text=True))    
 
-class TodoResourceTestCase(BaseTestCase):
-    '''
-
-
-        # TodoModelTestCase.create_todos()
-        # todo = Todo.select().get()
-        #     basic_header = {
-        #         'Authorization': 'Basic ' + base64.b64encode(
-        #             bytes(user.username + ':' + 'password', 'ascii')
-        #         ).decode('ascii')
-        #     }
-        #     rv = self.app.get('/api/v1/users/token', headers=basic_header)
-        #     self.assertEqual(rv.status_code, 200)
-          
 '''
 Tests:
 
