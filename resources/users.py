@@ -1,6 +1,7 @@
 ''' user resource '''
+import json
 
-from flask import jsonify, Blueprint, abort
+from flask import jsonify, Blueprint, abort, make_response
 from flask_restful import Resource, Api, reqparse, fields, marshal
 
 import models
