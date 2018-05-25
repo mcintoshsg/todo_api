@@ -1,4 +1,4 @@
-from base64 import b64encode
+from base64 import b64encode, b64decode
 import json
 import unittest
 
@@ -39,6 +39,14 @@ class UserModelTestCase(BaseTestCase):
                 password='password'
             )
 
+    def get_headers(user):
+        return {
+                'Authorization': 'Basic ' + b64encode(
+                    bytes(user.username + ':' + 'password', 'ascii')
+                ).decode('ascii')
+            }
+
+
     def test_create_user(self):
         ''' test the creation of the user '''
         with test_database(TEST_DB, (User, )):
@@ -48,7 +56,7 @@ class UserModelTestCase(BaseTestCase):
                 User.select().get().password,
                 'password'
             )
-
+  
 class TodoModelTestCase(BaseTestCase):
     ''' test cases for the todo model '''
     @staticmethod
@@ -69,6 +77,7 @@ class TodoModelTestCase(BaseTestCase):
                 'Walk Dog'
             )
 
+
 class ViewTestCase(BaseTestCase):
     ''' test the index page loads with the appropriate data '''
     def test_index_page_loads(self):
@@ -76,9 +85,17 @@ class ViewTestCase(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('<h1>My TODOs!</h1>', response.get_data(as_text=True))
 
+
 class UserResourceTestCase(BaseTestCase):
     ''' test the user api resourcses '''
-    def test_new_user(self):
+
+    def test_get_users(self):
+        with test_database(TEST_DB, (User,)):
+            UserModelTestCase.create_users(1)
+            response = self.app.get('/api/v1/users')
+            self.assertEqual(User.select().get().username, 'user_0')  
+      
+    def test_post_new_user(self):
         user_data = {
             'username': 'stuart',
             'email': 's@test.com',
@@ -102,54 +119,179 @@ class UserResourceTestCase(BaseTestCase):
             response = self.app.post('/api/v1/users', data=user_data)
             self.assertEqual(response.status_code, 400)  
             self.assertIn(r_test,
-                        response.get_data(as_text=True))    
+                        response.get_data(as_text=True))
+
+    def test_user_already_exists(self):
+        user_data = {
+                'username': 'user_1',
+                'email': 'test_1@example.com',
+                'password': 'password',
+                'verify_password': 'passwor'
+        }
+        UserModelTestCase.create_users(1)
+        
+        with test_database(TEST_DB, (User,)):
+            response = self.app.post('/api/v1/users', data=user_data)
+            self.assertEqual(response.status_code, 400)  
+            self.assertRaises(Exception)    
+
+    def test_no_username_provided(self):
+        user_data = {
+            'email': 's@test.com',
+            'password': 'password',
+            'verify_password': 'password'
+        }
+        with test_database(TEST_DB, (User,)):
+            response = self.app.post('/api/v1/users', data=user_data)
+            self.assertEqual(response.status_code, 400)  
+            self.assertIn('No username provided',
+                        response.get_data(as_text=True))                        
+
+    def test_no_email_provided(self):
+        user_data = {
+            'username': 'stuart',
+            'password': 'password',
+            'verify_password': 'password'
+        }
+        with test_database(TEST_DB, (User,)):
+            response = self.app.post('/api/v1/users', data=user_data)
+            self.assertEqual(response.status_code, 400)  
+            self.assertIn('No email provided',
+                        response.get_data(as_text=True))                        
+
+    def test_no_password_provided(self):
+        user_data = {
+            'username': 'stuart',
+            'email': 's@test.com',
+            'verify_password': 'password'
+        }
+        with test_database(TEST_DB, (User,)):
+            response = self.app.post('/api/v1/users', data=user_data)
+            self.assertEqual(response.status_code, 400)  
+            self.assertIn('No password provided',
+                        response.get_data(as_text=True))                        
+
+    def test_no_verify_password_provided(self):
+        user_data = {
+            'username': 'stuart',
+            'email': 's@test.com',
+            'password': 'password'
+        }
+        with test_database(TEST_DB, (User,)):
+            response = self.app.post('/api/v1/users', data=user_data)
+            self.assertEqual(response.status_code, 400)  
+            self.assertIn('No password verification',
+                        response.get_data(as_text=True))                        
+                                  
 
 class TodoResourceTestCase(BaseTestCase):
     ''' test the user api resourcses '''
     def test_get_todos_no_auth(self):
         response = self.app.get('/api/v1/todos')
-        r = response.get_data()
-        print(type(r))
+        self.assertEqual(response.status_code, 401) 
+        self.assertIn('Unauthorized Access',
+                        response.get_data(as_text=True))
 
+    def test_get_todos_with_auth(self):
+        test = ['Walk Dog', 'Clean Car']
+        
+        with test_database(TEST_DB, (Todo, )):
+            TodoModelTestCase.create_todos()
+            user = User.select().get()
+            headers = UserModelTestCase.get_headers(user)
+            
+            response = self.app.get('/api/v1/todos', headers=headers)
+            self.assertEqual(response.status_code, 200) 
+            for item in response.get_json():
+                self.assertIn(item['name'], test)
+    
+    def test_get_single_todo(self):
+       with test_database(TEST_DB, (Todo, )):
+            TodoModelTestCase.create_todos()
+            user = User.select().get()
+            headers = UserModelTestCase.get_headers(user)
+           
+            response = self.app.get('/api/v1/todos/'
+                                    + str(Todo.select().get().id),
+                                    headers=headers)
+            self.assertEqual(response.status_code, 200) 
+            self.assertEqual(Todo.select().get().name, 'Walk Dog')
 
-    def test_post_todo_with_auth(self):
+           
+    def test_get_single_todo_does_not_exist(self):
+       with test_database(TEST_DB, (Todo, )):
+            TodoModelTestCase.create_todos()
+            user = User.select().get()
+            headers = UserModelTestCase.get_headers(user)
+        
+            response = self.app.get('/api/v1/todos/3', headers=headers)
+            self.assertEqual(response.status_code, 404) 
+               
+    def test_good_post_todo(self):
         UserModelTestCase.create_users(1)
         user = User.select().get()
         todo_data = {
             'name': 'Finish Project',
             'created_by': user.id
         }
-        
-        headers={
-                'Authorization': 'Basic ' + b64encode(
-                    bytes(user.username + ':' + 'password', 'ascii')
-                ).decode('ascii')
-            }
-        
-        r_test = "Finish Project"
+        headers = UserModelTestCase.get_headers(user)
         
         with test_database(TEST_DB, (Todo,)):
             response = self.app.post('/api/v1/todos', data=todo_data,
                                     headers=headers)
             self.assertEqual(response.status_code, 201)  
-            self.assertIn(r_test,
+            self.assertEqual(Todo.select().get().name, 'Finish Project')
+            self.assertEqual(response.location, 
+                            'http://localhost/api/v1/todos/1') 
+
+    def test_bad_post_todo(self):
+        UserModelTestCase.create_users(1)
+        user = User.select().get()
+        todo_data = {
+            'created_by': user.id
+        }
+        headers = UserModelTestCase.get_headers(user)
+
+        with test_database(TEST_DB, (Todo,)):
+            response = self.app.post('/api/v1/todos', data=todo_data,
+                                    headers=headers)
+            self.assertEqual(response.status_code, 400)  
+            self.assertIn('No task provided',
                         response.get_data(as_text=True))
+           
+    def test_delete_todo(self):
+       with test_database(TEST_DB, (Todo, )):
+            TodoModelTestCase.create_todos()
+            user = User.select().get()
+            headers = UserModelTestCase.get_headers(user)
+            
+            response = self.app.delete('/api/v1/todos/' + 
+                                        str(Todo.select().get().id), 
+                                        headers=headers)
 
+            self.assertEqual(response.status_code, 204) 
+            self.assertNotEqual(Todo.select().get().name, 'Walk Dog')
+            self.assertEqual(response.location, 
+                            'http://localhost/api/v1/todos')    
+        
+    def test_put_todo(self):
+       with test_database(TEST_DB, (Todo, )):
+            TodoModelTestCase.create_todos()
+            user = User.select().get()
+            headers = UserModelTestCase.get_headers(user)
+            
+            todo_data = {'name': 'Feed Dog'}
+           
+            response = self.app.put('/api/v1/todos/' 
+                                    + str(Todo.select().get().id), 
+                                    data=todo_data, headers=headers)
+            self.assertEqual(response.status_code, 200) 
+            self.assertEqual(Todo.select().get().name, 'Feed Dog')
+            self.assertEqual(response.location, 
+                            'http://localhost/api/v1/todos/1') 
+        
+                     
 
-'''
-Tests:
-
-3. Check the tasks resource - add 2 new todos and check the response headers 
-    'location' and that the resource data contains the 2 new todos
-4. Check the tasks resource for a post with 'no task provided in json response'
-5. Check for a single todo response with teh corrct location id'
-6. Check for a 404 response if todo id does not exist
-7. Check for updated Todo - changes in resource data 
-8. Check for updated Todo in response 
-9. Check for deleted Tdod - i.e. get 404 does not exist
-10. Check login and not login - i.e. No todos and todoa 
-
-'''
 
 
 if __name__ == '__main__':

@@ -34,10 +34,10 @@ class TodoList(Resource):
         )
         super().__init__()
 
+    @auth.login_required
     def get(self):
         todos = [marshal(todos, todo_fields)
                     for todos in models.Todo.select()]
-        print(type(todos))            
         return todos
 
     @marshal_with(todo_fields)
